@@ -1,3 +1,4 @@
+using Android.Util;
 using Java.IO;
 using Java.Util.Concurrent;
 using Javax.Net.Ssl;
@@ -17,31 +18,35 @@ namespace ModernHttpClient
 {
     public class NativeMessageHandler : HttpClientHandler
     {
-        OkHttpClient client = new OkHttpClient();
         readonly CacheControl noCacheCacheControl = default(CacheControl);
         readonly bool throwOnCaptiveNetwork;
-
         readonly Dictionary<HttpRequestMessage, WeakReference> registeredProgressCallbacks =
             new Dictionary<HttpRequestMessage, WeakReference>();
+
         readonly Dictionary<string, string> headerSeparators =
             new Dictionary<string, string>(){
                 {"User-Agent", " "}
             };
 
+        public OkHttpClient Client { get; private set; } = new OkHttpClient();
+        
         public bool DisableCaching { get; set; }
+
         public TimeSpan? Timeout { get; set; }
+
         public bool EnableUntrustedCertificates { get; set; }
 
         public NativeMessageHandler() : this(false, false) {}
 
         public static Func<string, ISSLSession, bool> verifyHostnameCallback;
+
         public static IX509TrustManager customTrustManager;
 
-        public NativeMessageHandler(bool throwOnCaptiveNetwork, bool customSSLVerification, NativeCookieHandler cookieHandler = null)
+        public NativeMessageHandler(bool throwOnCaptiveNetwork, bool customSSLVerification, NativeCookieHandler cookieHandler = null, List<IInterceptor> networkInterceptors = null, List<IInterceptor> interceptors = null)
         {
             this.throwOnCaptiveNetwork = throwOnCaptiveNetwork;
 
-            var clientBuilder = client.NewBuilder();
+            var clientBuilder = Client.NewBuilder();
 
             /*if (customSSLVerification)
             {
@@ -67,7 +72,17 @@ namespace ModernHttpClient
                 clientBuilder.CookieJar(cookieHandler);
             }
 
-            client = clientBuilder.Build();
+            if (interceptors != null && interceptors.Count > 0) {
+                foreach (var interceptor in interceptors)
+                    clientBuilder.AddInterceptor(interceptor);
+            }
+
+            if (networkInterceptors != null && networkInterceptors.Count > 0) {
+                foreach (var interceptor in networkInterceptors)
+                    clientBuilder.AddNetworkInterceptor(interceptor);
+            }
+
+            Client = clientBuilder.Build();
 
             noCacheCacheControl = (new CacheControl.Builder()).NoCache().Build();
 
@@ -117,7 +132,7 @@ namespace ModernHttpClient
 
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
-            var clientBuilder = client.NewBuilder();
+            var clientBuilder = Client.NewBuilder();
 
             // Support self-signed certificates
             if (EnableUntrustedCertificates)
@@ -142,7 +157,9 @@ namespace ModernHttpClient
                 clientBuilder.ReadTimeout(timeout, TimeUnit.Milliseconds);
             }
 
-            client = clientBuilder.Build();
+            Client = clientBuilder.Build();
+
+            //RegisterForProgress(request, this.HandleProgress);
 
             var java_uri = request.RequestUri.GetComponents(UriComponents.AbsoluteUri, UriFormat.UriEscaped);
             var url = new Java.Net.URL(java_uri);
@@ -173,20 +190,20 @@ namespace ModernHttpClient
                 .Union(request.Content != null ?
                     (IEnumerable<KeyValuePair<string, IEnumerable<string>>>)request.Content.Headers :
                     Enumerable.Empty<KeyValuePair<string, IEnumerable<string>>>());
-            
+
             // Add Cookie Header if there's any cookie for the domain in the cookie jar
             var stringBuilder = new StringBuilder();
 
-            if (client.CookieJar() != null)
+            if (Client.CookieJar() != null)
             {
-                var jar = client.CookieJar();
+                var jar = Client.CookieJar();
                 var cookies = jar.LoadForRequest(HttpUrl.Get(url));
                 foreach (var cookie in cookies)
                 {
                     stringBuilder.Append(cookie.Name() + "=" + cookie.Value() + ";");
                 }
             }
-                
+
             foreach (var kvp in keyValuePairs)
             {
                 if (kvp.Key == "Cookie")
@@ -206,7 +223,7 @@ namespace ModernHttpClient
             cancellationToken.ThrowIfCancellationRequested();
 
             var rq = requestBuilder.Build();
-            var call = client.NewCall(rq);
+            var call = Client.NewCall(rq);
 
             // NB: Even closing a socket must be done off the UI thread. Cray!
             cancellationToken.Register(() => Task.Run(() => call.Cancel()));
@@ -266,7 +283,7 @@ namespace ModernHttpClient
 
             if (respBody != null)
             {
-                var content = new ProgressStreamContent(respBody.ByteStream(), CancellationToken.None);
+                var content = new ProgressStreamContent(request.RequestUri.AbsoluteUri, respBody.ByteStream(), CancellationToken.None);
                 content.Progress = getAndRemoveCallbackFromRegister(request);
                 ret.Content = content;
             }
@@ -283,6 +300,15 @@ namespace ModernHttpClient
             }
 
             return ret;
+        }
+
+        private void HandleProgress(string uri, long bytes, long totalBytes, long totalBytesExpected)
+        {
+            if (totalBytes > 24 * 1024)
+            {
+                Log.Verbose("BBCRssStreamViewer", $"OkHttp3 Throttling Request {uri} {bytes} {totalBytes} {totalBytesExpected}");
+                Thread.Sleep(1000);
+            }
         }
     }
 

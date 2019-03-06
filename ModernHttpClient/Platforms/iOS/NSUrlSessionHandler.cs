@@ -234,7 +234,7 @@ namespace ModernHttpClient
                         throw new CaptiveNetworkException(req.RequestUri, new Uri(resp.Url.ToString()));
                     }
 
-                    var content = new CancellableStreamContent(data.ResponseBody, () => {
+                    var content = new CancellableStreamContent(data.Request.RequestUri.AbsoluteUri, data.ResponseBody, () => {
                         if (!data.IsCompleted)
                         {
                             dataTask.Cancel();
@@ -872,7 +872,7 @@ namespace ModernHttpClient
     {
         Action onDispose;
 
-        public CancellableStreamContent(Stream source, Action onDispose) : base(source, CancellationToken.None)
+        public CancellableStreamContent(string uri, Stream source, Action onDispose) : base(uri, source, CancellationToken.None)
         {
             this.onDispose = onDispose;
         }

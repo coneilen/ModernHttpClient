@@ -4,7 +4,7 @@
     <TargetFrameworks>netstandard2.0;MonoAndroid80;Xamarin.iOS10;uap10.0.16299;</TargetFrameworks>
     <AssemblyName>ModernHttpClient</AssemblyName>
     <RootNamespace>ModernHttpClient</RootNamespace>
-    <PackageId>modernhttpclient-updated</PackageId>
+    <PackageId>modernhttpclient-updated.microsoft</PackageId>
     
     <Product>$(AssemblyName) ($(TargetFramework))</Product>
     <AssemblyVersion>2.7.2</AssemblyVersion>
@@ -77,6 +77,10 @@
     <Owners>Alex Rainman</Owners>
     <Authors>Alex Rainman</Authors>
     <Copyright>Copyright Paul Betts © 2012</Copyright>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)|$(TargetFramework)|$(Platform)'=='Release|netstandard2.0|AnyCPU'">
+    <DocumentationFile />
   </PropertyGroup>
 
   <ItemGroup>

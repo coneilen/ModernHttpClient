@@ -7,29 +7,33 @@ using System.Threading;
 
 namespace ModernHttpClient
 {
-    public delegate void ProgressDelegate (long bytes, long totalBytes, long totalBytesExpected);
+    public delegate void ProgressDelegate (string uri, long bytes, long totalBytes, long totalBytesExpected);
 
     public class ProgressStreamContent : StreamContent
     {
-        public ProgressStreamContent(Stream stream, CancellationToken token)
-            : this(new ProgressStream(stream, token))
+        private readonly string uri;
+
+        public ProgressStreamContent(string uri, Stream stream, CancellationToken token)
+            : this(new ProgressStream(stream, token), uri)
         {
         }
 
-        public ProgressStreamContent(Stream stream, int bufferSize)
-            : this(new ProgressStream(stream, CancellationToken.None), bufferSize)
+        public ProgressStreamContent(string uri, Stream stream, int bufferSize)
+            : this(new ProgressStream(stream, CancellationToken.None), bufferSize, uri)
         {
         }
 
-        ProgressStreamContent(ProgressStream stream)
+        ProgressStreamContent(ProgressStream stream, string uri)
             : base(stream)
         {
+            this.uri = uri;
             init(stream);
         }
 
-        ProgressStreamContent(ProgressStream stream, int bufferSize)
+        ProgressStreamContent(ProgressStream stream, int bufferSize, string uri)
             : base(stream, bufferSize)
         {
+            this.uri = uri;
             init(stream);
         }
 
@@ -61,7 +65,7 @@ namespace ModernHttpClient
             _totalBytesExpected = Math.Max(-1, _totalBytesExpected);
             _totalBytes += bytes;
 
-            Progress(bytes, _totalBytes, _totalBytesExpected);
+            Progress(this.uri, bytes, _totalBytes, _totalBytesExpected);
         }
 
         ProgressDelegate _progress;
